@@ -13,6 +13,8 @@ export interface Config {
   pathPrefix: string;
   allowlistUserIds: ReadonlySet<string>;
   allowlistChatIds: ReadonlySet<string>;
+  /** Telegram chat types that may wake the bot. Default is private only. */
+  allowedChatTypes: ReadonlySet<string>;
   wakeCommands: ReadonlySet<string>;
   replyTokenTtlSeconds: number;
   typingRefreshMs: number;
@@ -144,6 +146,28 @@ export function normalizePublicBaseUrl(raw: string): string {
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
+export const ALLOWED_CHAT_TYPE_NAMES = ["private", "group", "supergroup"] as const;
+const ALLOWED_CHAT_TYPE_SET = new Set<string>(ALLOWED_CHAT_TYPE_NAMES);
+
+/**
+ * Empty means private chats only. Unknown names are reported and dropped.
+ * If nothing valid remains, the default (private) is kept.
+ */
+export function parseAllowedChatTypes(raw: string, problems: string[]): Set<string> {
+  if (!raw.trim()) return new Set(["private"]);
+  const allowed = new Set<string>();
+  let rejected = false;
+  for (const part of raw.split(",")) {
+    const name = part.trim().toLowerCase();
+    if (!name) continue;
+    if (ALLOWED_CHAT_TYPE_SET.has(name)) allowed.add(name);
+    else rejected = true;
+  }
+  if (rejected || allowed.size === 0) problems.push("ALLOWED_CHAT_TYPES");
+  if (allowed.size === 0) return new Set(["private"]);
+  return allowed;
+}
+
 export function parseCommandList(raw: string): string[] {
   const names: string[] = [];
   const source = raw.trim() ? raw : DEFAULT_WAKE_COMMANDS.join(",");
@@ -183,6 +207,7 @@ export function loadConfig(env: EnvSource): Config {
   const allowlistChatIds = new Set(parseIdList(readString(env, "ALLOWLIST_CHAT_IDS"), rejectedChats));
   if (rejectedUsers.length > 0) problems.push("ALLOWLIST_USER_IDS");
   if (rejectedChats.length > 0) problems.push("ALLOWLIST_CHAT_IDS");
+  const allowedChatTypes = parseAllowedChatTypes(readString(env, "ALLOWED_CHAT_TYPES"), problems);
   const grokWebhookUrl = readString(env, "GROK_WEBHOOK_URL");
   const allowInsecureWebhook = readBool(env, "ALLOW_INSECURE_WEBHOOK");
   if (grokWebhookUrl && !isUsableGrokUrl(grokWebhookUrl, allowInsecureWebhook)) problems.push("GROK_WEBHOOK_URL");
@@ -203,6 +228,7 @@ export function loadConfig(env: EnvSource): Config {
     pathPrefix,
     allowlistUserIds,
     allowlistChatIds,
+    allowedChatTypes,
     wakeCommands: new Set(parseCommandList(readString(env, "WAKE_COMMANDS"))),
     replyTokenTtlSeconds: readBoundedInt(env, "REPLY_TOKEN_TTL_SECONDS", 1800, 60, 3600),
     typingRefreshMs,

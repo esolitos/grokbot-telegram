@@ -312,21 +312,60 @@ describe("outbound /send and typing stop", () => {
     expect(scoped.status).toBe(403);
   });
 
-  it("lets a reply token answer a group the user was allowed into, and blocks the outbound key there", async () => {
-    const app = createTestApp();
-    await postUpdate(app.deps, app.tasks, groupUpdate({
+  it("does not wake an allowlisted user in an unlisted group, and blocks the outbound key there", async () => {
+    const logs: Record<string, unknown>[] = [];
+    const mock = createFetchMock();
+    const tasks: Promise<unknown>[] = [];
+    const deps = buildDeps({
+      env: testEnv(),
+      fetchImpl: mock.fetchImpl,
+      waitUntil: (promise) => tasks.push(promise),
+      typingMode: "once",
+      log: (event) => logs.push(event),
+    });
+    let storedContext = false;
+    const pushContext = deps.store.pushContext.bind(deps.store);
+    deps.store.pushContext = async (...args) => {
+      storedContext = true;
+      return pushContext(...args);
+    };
+    const stranger = groupUpdate({
       text: "@testbot hi",
       updateId: 5,
       userId: 42,
       chatId: -999,
       entities: [{ type: "mention", offset: 0, length: 8 }],
+      replyTo: {
+        message_id: 4,
+        text: "secret from a stranger",
+        chat: { id: -999, type: "supergroup" },
+        from: { id: 100, is_bot: false, first_name: "Sam" },
+      },
+    });
+    await postUpdate(deps, tasks, stranger);
+    expect(mock.calls.filter((call) => call.url.startsWith("https://grok.example/hook"))).toHaveLength(0);
+    expect(storedContext).toBe(false);
+    expect(JSON.stringify(mock.calls)).not.toContain("secret from a stranger");
+    expect(logs).toContainEqual(expect.objectContaining({
+      reason: "not_allowlisted",
+      chat_id: "-999",
+      user_id: "42",
     }));
-    const token = (app.calls.find((call) => call.url.startsWith("https://grok.example/hook"))?.body as { reply: { token: string } }).reply.token;
+
+    const listed = createTestApp({ env: testEnv({ ALLOWLIST_CHAT_IDS: "-500,-999" }) });
+    await postUpdate(listed.deps, listed.tasks, groupUpdate({
+      text: "@testbot hi",
+      updateId: 6,
+      userId: 42,
+      chatId: -999,
+      entities: [{ type: "mention", offset: 0, length: 8 }],
+    }));
+    const token = (listed.calls.find((call) => call.url.startsWith("https://grok.example/hook"))?.body as { reply: { token: string } }).reply.token;
     const sent = await handleRequest(new Request("https://bridge.example/send", {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ chat_id: "-999", text: "hello from the bot" }),
-    }), app.deps);
+    }), listed.deps);
     expect(sent.status).toBe(200);
 
     const keyed = createTestApp({ env: testEnv({ OUTBOUND_API_KEY: "outbound-key-value-for-tests-0123456789" }) });
@@ -342,6 +381,28 @@ describe("outbound /send and typing stop", () => {
       body: JSON.stringify({ chat_id: "-500", text: "proactive" }),
     }), keyed.deps);
     expect(allowed.status).toBe(200);
+  });
+
+  it("drops group messages unless that chat type is enabled", async () => {
+    const logs: Record<string, unknown>[] = [];
+    const mock = createFetchMock();
+    const tasks: Promise<unknown>[] = [];
+    const deps = buildDeps({
+      env: testEnv({ ALLOWED_CHAT_TYPES: "" }),
+      fetchImpl: mock.fetchImpl,
+      waitUntil: (promise) => tasks.push(promise),
+      typingMode: "once",
+      log: (event) => logs.push(event),
+    });
+    await postUpdate(deps, tasks, groupUpdate({
+      text: "@testbot hi",
+      updateId: 1,
+      userId: 42,
+      entities: [{ type: "mention", offset: 0, length: 8 }],
+    }));
+    await postUpdate(deps, tasks, dmUpdate("hello", 2));
+    expect(mock.calls.filter((call) => call.url.startsWith("https://grok.example/hook"))).toHaveLength(1);
+    expect(logs).toContainEqual(expect.objectContaining({ reason: "chat_type", chat_id: "-500", chat_type: "supergroup" }));
   });
 
   it("lets an older wake's /typing/stop end only that wake, never a newer one", async () => {

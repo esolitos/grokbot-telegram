@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowlisted, isOutboundChatAllowed } from "../src/core/allowlist.js";
+import { chatTypeFromId, isAllowlisted, isChatAdmitted, isOutboundChatAllowed } from "../src/core/allowlist.js";
 import { classifyAddress } from "../src/core/address.js";
 import { loadConfig, parseIdList } from "../src/core/config.js";
 import { setMyCommandsBody, setWebhookBody } from "../src/core/commands.js";
@@ -26,21 +26,48 @@ describe("allowlist", () => {
   it("denies everyone when both lists are empty", () => {
     const closed = loadConfig({});
     expect(isAllowlisted("42", "42", closed)).toBe(false);
+    expect(isChatAdmitted("42", "42", "private", closed)).toBe(false);
     expect(isOutboundChatAllowed("42", closed)).toBe(false);
   });
 
-  it("admits a user id in any chat, and a chat id for every sender", () => {
-    expect(isAllowlisted("42", "42", config)).toBe(true);
-    expect(isAllowlisted("42", "-999", config)).toBe(true);
-    expect(isAllowlisted("100", "-500", config)).toBe(true);
-    expect(isAllowlisted("100", "-999", config)).toBe(false);
-    expect(isAllowlisted(null, null, config)).toBe(false);
+  it("admits a user id in private chats only, and a listed chat id when that type is enabled", () => {
+    const groups = loadConfig({
+      TELEGRAM_BOT_USERNAME: "@testbot",
+      ALLOWLIST_USER_IDS: "42, 7",
+      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWED_CHAT_TYPES: "private,group,supergroup",
+    });
+    expect(isChatAdmitted("42", "42", "private", config)).toBe(true);
+    expect(isChatAdmitted("42", "-999", "supergroup", config)).toBe(false);
+    expect(isChatAdmitted("42", "-500", "supergroup", config)).toBe(false);
+    expect(isChatAdmitted("100", "-500", "supergroup", groups)).toBe(true);
+    expect(isChatAdmitted("100", "-500", "group", groups)).toBe(true);
+    expect(isChatAdmitted("42", "-999", "group", groups)).toBe(false);
+    expect(isChatAdmitted("100", "-999", "supergroup", groups)).toBe(false);
+    expect(isChatAdmitted(null, null, "private", groups)).toBe(false);
+    expect(chatTypeFromId("-500")).toBe("group");
+    expect(chatTypeFromId("-100500")).toBe("supergroup");
+    expect(chatTypeFromId("42")).toBe("private");
   });
 
-  it("allows proactive sends only to listed chats or listed users' DMs", () => {
-    expect(isOutboundChatAllowed("-500", config)).toBe(true);
+  it("allows proactive sends only to listed chats of an enabled type, or listed users' DMs", () => {
+    const groups = loadConfig({
+      ALLOWLIST_USER_IDS: "42, 7",
+      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWED_CHAT_TYPES: "private,group,supergroup",
+    });
+    expect(isOutboundChatAllowed("-500", config)).toBe(false);
     expect(isOutboundChatAllowed("42", config)).toBe(true);
-    expect(isOutboundChatAllowed("-999", config)).toBe(false);
+    expect(isOutboundChatAllowed("-500", groups)).toBe(true);
+    expect(isOutboundChatAllowed("-100500", groups)).toBe(true);
+    expect(isOutboundChatAllowed("-999", groups)).toBe(false);
+    const supergroupsOnly = loadConfig({
+      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWED_CHAT_TYPES: "supergroup",
+    });
+    expect(isOutboundChatAllowed("-100500", supergroupsOnly)).toBe(true);
+    expect(isOutboundChatAllowed("-500", supergroupsOnly)).toBe(false);
+    expect(isOutboundChatAllowed("42", supergroupsOnly)).toBe(false);
   });
 
   it("ignores non-numeric allowlist entries", () => {
