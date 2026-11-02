@@ -259,7 +259,7 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `PUBLIC_BASE_URL` | yes | `https` origin for `reply.send_url` (`http` for localhost). Origin only. |
 | `ALLOWLIST_USER_IDS` | one of these | Comma-separated numeric user ids. Direct messages only. |
 | `ALLOWLIST_CHAT_IDS` | one of these | Comma-separated chat ids. Admits every sender in that chat when its type is allowed. |
-| `ALLOWED_CHAT_TYPES` | no | Default `private`. Comma-separated `private`, `group`, `supergroup`. Unknown names are dropped and listed under `problems`. A group type applies only to chat ids in `ALLOWLIST_CHAT_IDS`. |
+| `ALLOWED_CHAT_TYPES` | no | Default `private`. Comma-separated `private`, `group`, `supergroup`. Unknown names are dropped and listed under `problems`. A group type applies only to chat ids in `ALLOWLIST_CHAT_IDS`. Proactive sends infer the type from the id: `-100…` is a supergroup, any other negative id is a basic group, and a positive id is a private chat. |
 | `PATH_PREFIX` | no | Mount prefix, for example `/bridge`. |
 | `WAKE_COMMANDS` | no | Default `/ask,/help`. |
 | `OUTBOUND_API_KEY` | no | Leave unset. Optional key for proactive sends, at least 32 characters. Off unless you set it. |
