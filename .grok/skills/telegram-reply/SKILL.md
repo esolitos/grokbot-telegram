@@ -97,7 +97,8 @@ The person sees one answer per wake.
 | 200 `already_sent: true` | That final or `idempotency_key` was delivered earlier. | Stop. |
 | 400 `bad_disable_notification` | `disable_notification` was something other than true or false. | Leave it out. |
 | 400 `bad_idempotency_key` | The key was empty, too long, or had other characters. | Fix the key, or leave it out. |
-| 401 `expired` | The 30 minute token lapsed. | Stop. They can message again. |
+| 401 `expired` | The 10 minute token lapsed. | Stop. They can message again. |
+| 429 `progress_limit` | This wake already used its non-final sends (3 by default). | Stop sending progress lines. Send the answer with `"final": true`. |
 | 401 `wake_closed` | You already sent `final: true` for this wake. | Stop. |
 | 401 anything else | The token is missing or damaged. | Stop. Use only the token from the payload. |
 | 403 `scope` | Chat or topic differs from the token's. | Send again with `reply.chat_id` and `reply.message_thread_id`. |

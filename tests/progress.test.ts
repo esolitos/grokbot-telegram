@@ -131,6 +131,21 @@ describe("👀 reaction lifecycle", () => {
 });
 
 describe("/send final and interim semantics", () => {
+  it("rejects non-final sends past the per-wake cap and still accepts the final answer", async () => {
+    const bridge = app({ env: testEnv({ MAX_NON_FINAL_SENDS: "2" }) });
+    await postUpdate(bridge.deps, bridge.tasks, dmUpdate("long job", 1));
+    const reply = bridge.replies()[0]!;
+    expect((await bridge.send(reply, { text: "one", idempotency_key: "progress-1" })).status).toBe(200);
+    const repeat = await bridge.send(reply, { text: "one", idempotency_key: "progress-1" });
+    expect(await repeat.json()).toMatchObject({ ok: true, already_sent: true });
+    expect((await bridge.send(reply, { text: "two" })).status).toBe(200);
+    const blocked = await bridge.send(reply, { text: "three" });
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ ok: false, error: "progress_limit" });
+    expect(bridge.telegram("sendMessage")).toHaveLength(2);
+    expect((await bridge.send(reply, { text: "done", final: true })).status).toBe(200);
+  });
+
   it("sends interim lines silently and re-pulses typing right after them", async () => {
     const bridge = app();
     await postUpdate(bridge.deps, bridge.tasks, dmUpdate("long job", 1));
@@ -222,8 +237,8 @@ describe("/send final and interim semantics", () => {
     await postUpdate(bridge.deps, bridge.tasks, dmUpdate("q", 1));
     const wake = Object.values((await bridge.deps.store.getTyping(scopeKey("42", null)))?.wakes ?? {})[0];
     expect(wake?.leaseUntil).toBe(NOW + 600_000);
-    // By default the 30 minute ceiling and the 30 minute reply token line up.
-    expect(wake?.deadline).toBe(NOW + 1_800_000);
+    // The default 10 minute reply token caps the 30 minute typing ceiling.
+    expect(wake?.deadline).toBe(NOW + 600_000);
 
     // A shorter token wins: nothing can send "final" after it expires.
     const shorter = app({ env: testEnv({ REPLY_TOKEN_TTL_SECONDS: "900" }) });

@@ -32,6 +32,11 @@ export interface Store {
   finishSend(key: string, record: SendRecord, now: number, ttlMs: number): Promise<void>;
   /** Drop a claim after a send that definitely did not go out, so it can be tried again. */
   releaseSend(key: string): Promise<void>;
+  /**
+   * Add `delta` to the non-final send count for one wake. Returns the count
+   * after the change, never below zero. The counter lasts `ttlMs`.
+   */
+  adjustProgress(wakeId: string, delta: number, now: number, ttlMs: number): Promise<number>;
   isWakeClosed(wakeId: string, now: number): Promise<boolean>;
 }
 
@@ -118,6 +123,7 @@ export class MemoryStore implements Store {
   private readonly typing = new Map<string, TypingScope>();
   private readonly closedWakes = new Map<string, number>();
   private readonly sends = new Map<string, { until: number; record: SendRecord }>();
+  private readonly progress = new Map<string, { count: number; until: number }>();
 
   async claimUpdate(updateId: number, now: number, ttlMs: number): Promise<"new" | "duplicate"> {
     this.pruneUpdates(now);
@@ -224,6 +230,17 @@ export class MemoryStore implements Store {
 
   async releaseSend(key: string): Promise<void> {
     this.sends.delete(key);
+  }
+
+  async adjustProgress(wakeId: string, delta: number, now: number, ttlMs: number): Promise<number> {
+    for (const [id, entry] of this.progress) {
+      if (entry.until <= now) this.progress.delete(id);
+    }
+    const existing = this.progress.get(wakeId);
+    const current = existing && existing.until > now ? existing.count : 0;
+    const count = Math.max(0, current + delta);
+    this.progress.set(wakeId, { count, until: now + ttlMs });
+    return count;
   }
 
   private pruneUpdates(now: number): void {

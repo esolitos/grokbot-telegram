@@ -45,6 +45,7 @@ interface DoOp {
   wakeId?: string | null;
   sendKey?: string;
   record?: SendRecord;
+  delta?: number;
 }
 
 export async function handleDoFetch(
@@ -90,6 +91,8 @@ export async function handleDoFetch(
     case "send.release":
       if (body.sendKey) await storage.delete(`send:${body.sendKey}`);
       return Response.json({ ok: true });
+    case "progress.add":
+      return Response.json(await progressAdd(storage, body));
     default:
       return Response.json({ ok: false, error: "unknown_op" }, { status: 400 });
   }
@@ -293,6 +296,24 @@ async function typingTouch(
   // Also re-arms the alarm if it was ever lost.
   await scheduleTyping(storage, now);
   return { active: result.active, extended: result.extended };
+}
+
+/** One counter per wake, on the dedupe object, for the token's remaining life. */
+async function progressAdd(storage: DoStorage, body: DoOp): Promise<{ count: number }> {
+  if (!body.wakeId || typeof body.delta !== "number" || !Number.isFinite(body.delta)) return { count: 0 };
+  const now = body.now ?? Date.now();
+  const key = `prog:${body.wakeId}`;
+  const existing = await storage.get<{ count?: unknown; until?: unknown }>(key);
+  const current = existing
+    && typeof existing.until === "number"
+    && existing.until > now
+    && typeof existing.count === "number"
+    ? existing.count
+    : 0;
+  const count = Math.max(0, current + body.delta);
+  await storage.put(key, { count, until: now + (body.ttlMs ?? 3_600_000) });
+  await pruneExpired(storage, "prog:", now);
+  return { count };
 }
 
 async function wakeClose(storage: DoStorage, body: DoOp): Promise<{ ok: true }> {

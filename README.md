@@ -174,7 +174,7 @@ curl -sS -X POST "$SEND_URL" \
 
 `$SEND_URL` and `$REPLY_TOKEN` are `reply.send_url` and `reply.token`. Put `"final": true` on the answer. Once Telegram accepts it, the bridge stops typing, removes the 👀, and retires the token. Earlier sends are progress lines, and they go out silently.
 
-The token lasts `REPLY_TOKEN_TTL_SECONDS` (30 minutes by default). It works for several sends until the final one, so the assistant can send a progress line and then the answer. It is valid only for its chat and topic. Use a different `REPLY_TOKEN_SECRET` for every bridge, because every bridge that shares a secret accepts the same tokens.
+The token lasts `REPLY_TOKEN_TTL_SECONDS` (10 minutes by default). It works for several sends until the final one, so the assistant can send a progress line and then the answer. Non-final sends are capped at `MAX_NON_FINAL_SENDS` per wake (3 by default). Another one returns `429 {"ok": false, "error": "progress_limit"}`. A repeat of a delivered `idempotency_key` does not count. The token is valid only for its chat and topic. Use a different `REPLY_TOKEN_SECRET` for every bridge, because every bridge that shares a secret accepts the same tokens.
 
 `/send` keeps each answer to one Telegram message:
 
@@ -265,7 +265,8 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `OUTBOUND_API_KEY` | no | Key for proactive sends. At least 32 characters. |
 | `BRIDGE_ACK` | no | Default `false`. When `true`, the bridge sends "On it." before the assistant speaks. |
 | `FAST_GREETING` | no | Default `false`. When `true`, the bridge itself answers a bare "hi", "ping", or "thanks". |
-| `REPLY_TOKEN_TTL_SECONDS` | no | Default `1800` (30 min). Clamped to 60-3600. Also caps how long typing and the 👀 last. |
+| `REPLY_TOKEN_TTL_SECONDS` | no | Default `600` (10 min). Clamped to 60-3600. Also caps how long typing and the 👀 last. |
+| `MAX_NON_FINAL_SENDS` | no | Default `3`. Clamped to 0-20. Non-final `/send` calls allowed per wake. `0` allows only the final answer. |
 | `TYPING_REFRESH_MS` | no | Default `3000`. Clamped to 1000-4500. One typing action per chat per refresh. |
 | `TYPING_LEASE_MS` | no | Default `600000` (10 min). Clamped to 60000-3600000 and to `TYPING_MAX_MS`. Renewed by each progress line and heartbeat. |
 | `TYPING_MAX_MS` | no | Default `1800000` (30 min). Clamped to 60000-7200000. Ceiling per wake from its start. |

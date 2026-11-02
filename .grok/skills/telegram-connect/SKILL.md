@@ -377,7 +377,8 @@ If the group was upgraded from a basic group, its chat id changed. Look for a `c
 | The person gets the same answer two or more times | Count the `wake` log lines for that message. Two wakes mean the update reached a new Vercel or Node process. One wake means the assistant sent twice: look for `send_repeated` or `send_ambiguous`, and save the step 9 prompt on the routine again. |
 | Log reason `rate_limited` | More than 20 wakes in a minute from that chat or person. Wait, or raise `RATE_LIMIT_MAX`. |
 | Grok Bot returns 401 on the wake | `GROK_WEBHOOK_SENDER_KEY` is missing or wrong. |
-| `/send` returns 401 `expired` or `wake_closed` | The reply token's 30 minutes ran out, or a final message retired it. They send a new Telegram message. |
+| `/send` returns 401 `expired` or `wake_closed` | The reply token's 10 minutes ran out, or a final message retired it. They send a new Telegram message. |
+| `/send` returns 429 `progress_limit` | That wake already sent `MAX_NON_FINAL_SENDS` progress lines (3 by default). The answer still goes out with `"final": true`. |
 | `/send` returns 200 `already_sent`, or 409 with `ambiguous: true` | The assistant repeated a final or an `idempotency_key`, and the bridge kept the first send. Working as designed. |
 | `/send` returns 403 `scope` | `chat_id` or `message_thread_id` differs from the token's. Use the values from `reply`. |
 | Telegram says "message is too long" | The bridge splits at 4096 characters, so the text had a broken entity. Keep `parse_mode` unset. |
