@@ -446,14 +446,33 @@ describe("outbound /send and typing stop", () => {
 });
 
 describe("health", () => {
-  it("reports configuration without values", async () => {
+  it("returns liveness only unless detail is opted in or a health token matches", async () => {
     const app = createTestApp();
     const response = await handleRequest(new Request("https://bridge.example/healthz"), app.deps);
-    const body = await response.json() as { ok: boolean; ready: boolean; configured: Record<string, boolean> };
+    const body = await response.json();
     expect(response.status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(body.ready).toBe(true);
-    expect(body.configured.allowlist).toBe(true);
+    expect(body).toEqual({ ok: true });
     expect(JSON.stringify(body)).not.toContain("webhook-secret-value");
+
+    const detail = createTestApp({ env: testEnv({ HEALTH_DETAIL: "true" }) });
+    const open = await handleRequest(new Request("https://bridge.example/healthz"), detail.deps);
+    const openBody = await open.json() as { ready: boolean; configured: Record<string, boolean>; problems: string[] };
+    expect(openBody.ready).toBe(true);
+    expect(openBody.configured.allowlist).toBe(true);
+    expect(openBody.problems).toEqual([]);
+    expect(JSON.stringify(openBody)).not.toContain("webhook-secret-value");
+
+    const token = "health-token-value-for-tests-0123456789";
+    const locked = createTestApp({ env: testEnv({ HEALTHZ_TOKEN: token, HEALTH_DETAIL: "true" }) });
+    const hidden = await handleRequest(new Request("https://bridge.example/healthz"), locked.deps);
+    expect(await hidden.json()).toEqual({ ok: true });
+    const shown = await handleRequest(new Request("https://bridge.example/healthz", {
+      headers: { authorization: `Bearer ${token}` },
+    }), locked.deps);
+    expect((await shown.json() as { ready: boolean }).ready).toBe(true);
+    const wrong = await handleRequest(new Request("https://bridge.example/healthz", {
+      headers: { authorization: "Bearer not-the-health-token-value-0123456789" },
+    }), locked.deps);
+    expect(await wrong.json()).toEqual({ ok: true });
   });
 });

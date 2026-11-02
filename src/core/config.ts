@@ -39,6 +39,10 @@ export interface Config {
   bridgeAck: boolean;
   fastGreeting: boolean;
   outboundApiKey: string | null;
+  /** When true, and no HEALTHZ_TOKEN is set, /healthz includes configuration status. */
+  healthDetail: boolean;
+  /** When set, the detailed /healthz body requires this bearer. */
+  healthzToken: string | null;
   maxBodyBytes: number;
   dedupeTtlMs: number;
   allowInsecureWebhook: boolean;
@@ -203,6 +207,8 @@ export function loadConfig(env: EnvSource): Config {
   const replySecret = readString(env, "REPLY_TOKEN_SECRET");
   if (replySecret && replySecret.length < MIN_REPLY_SECRET_LENGTH) problems.push("REPLY_TOKEN_SECRET");
   if (outbound && outbound.length < MIN_OUTBOUND_KEY_LENGTH) problems.push("OUTBOUND_API_KEY");
+  const healthz = readString(env, "HEALTHZ_TOKEN");
+  if (healthz && healthz.length < MIN_REPLY_SECRET_LENGTH) problems.push("HEALTHZ_TOKEN");
   const baseRaw = readString(env, "PUBLIC_BASE_URL");
   const publicBaseUrl = normalizePublicBaseUrl(baseRaw);
   if (baseRaw && !publicBaseUrl) problems.push("PUBLIC_BASE_URL");
@@ -251,6 +257,8 @@ export function loadConfig(env: EnvSource): Config {
     bridgeAck: readBool(env, "BRIDGE_ACK"),
     fastGreeting: readBool(env, "FAST_GREETING"),
     outboundApiKey: outbound.length >= MIN_OUTBOUND_KEY_LENGTH ? outbound : null,
+    healthDetail: readBool(env, "HEALTH_DETAIL"),
+    healthzToken: healthz.length >= MIN_REPLY_SECRET_LENGTH ? healthz : null,
     maxBodyBytes: Math.max(1024, readInt(env, "MAX_BODY_BYTES", 1_000_000)),
     dedupeTtlMs: Math.max(1000, readInt(env, "DEDUPE_TTL_MS", 86_400_000)),
     allowInsecureWebhook,

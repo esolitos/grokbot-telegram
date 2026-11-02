@@ -186,7 +186,7 @@ npx wrangler secret bulk .env
 
 When `PUBLIC_BASE_URL` is already in `.env`, `npx wrangler deploy --secrets-file .env` deploys and uploads the file in one command.
 
-`GROK_WEBHOOK_URL` and `GROK_WEBHOOK_SENDER_KEY` come in step 9. `/healthz` shows `"ready": true` once both are valid. Until then, `/webhook` still checks the webhook secret.
+`GROK_WEBHOOK_URL` and `GROK_WEBHOOK_SENDER_KEY` come in step 9. With `HEALTH_DETAIL=true`, `/healthz` shows `"ready": true` once both are valid. Until then, `/webhook` still checks the webhook secret. The default health body is `{"ok": true}` and does not list settings.
 
 Leave `PATH_PREFIX` empty. The public paths are `/webhook`, `/send`, `/typing/stop`, `/typing/heartbeat`, and `/healthz`.
 
@@ -235,7 +235,7 @@ On Render, there is no bulk-secret command. They point the service environment a
 
 The process starts only with a valid `TELEGRAM_WEBHOOK_SECRET`, `REPLY_TOKEN_SECRET`, and `PUBLIC_BASE_URL`, and it logs the names of any that are missing. They write the https origin in front of the process onto `PUBLIC_BASE_URL` in `.env`, load the file again the same way, and start again.
 
-Check, on every host: `GET /healthz` returns JSON with `"ok": true`. `ready` can stay false until step 9. In `configured`, `telegram_bot_token`, `telegram_webhook_secret`, `bot_username`, `reply_token_secret`, `public_base_url`, and `allowlist` are true, and `problems` is empty. `problems` lists the names of settings that were set but rejected, such as a short `REPLY_TOKEN_SECRET`. Fix each one in `.env` and load the file again before you continue. A normal health body holds only booleans and setting names. If the body holds anything else, keep it out of the chat.
+Set `HEALTH_DETAIL=true` in `.env` for this check, and load the file again. Check, on every host: `GET /healthz` returns JSON with `"ok": true`. `ready` can stay false until step 9. In `configured`, `telegram_bot_token`, `telegram_webhook_secret`, `bot_username`, `reply_token_secret`, `public_base_url`, and `allowlist` are true, and `problems` is empty. `problems` lists the names of settings that were set but rejected, such as a short `REPLY_TOKEN_SECRET`. Fix each one in `.env` and load the file again before you continue. A detailed health body holds only booleans and setting names. If the body holds anything else, keep it out of the chat. After setup, set `HEALTH_DETAIL` back to `false`. A platform probe only needs `{"ok": true}`. If they set `HEALTHZ_TOKEN` (at least 32 characters), send it as `Authorization: Bearer` to see the detail. A wrong or missing bearer gets the liveness body.
 
 ## Step 9: Create the Grok Bot webhook routine
 
@@ -298,7 +298,7 @@ They confirm both lines are filled. The URL also grants access, so ask only "is 
 
 Load `.env` again the same way as step 8. Cloudflare is `npx wrangler secret bulk .env`. Vercel is another paste or import of `.env` on the team Environment Variables page, then `npx vercel --prod`. Fly.io is `fly secrets import < .env`. Railway is the RAW Editor again. Render is the service environment pointed at `.env` again. A VPS is a restart of `npm start` so it reads the file.
 
-Check: `/healthz` now has `"ready": true`.
+Check: with `HEALTH_DETAIL=true`, or with the `HEALTHZ_TOKEN` bearer, `/healthz` now has `"ready": true`. Then set `HEALTH_DETAIL` back to `false`.
 
 ## Step 10: Register the webhook and commands
 
@@ -384,6 +384,7 @@ If the group was upgraded from a basic group, its chat id changed. Look for a `c
 | `/send` returns 403 `scope` | `chat_id` or `message_thread_id` differs from the token's. Use the values from `reply`. |
 | Telegram says "message is too long" | The bridge splits at 4096 characters, so the text had a broken entity. Keep `parse_mode` unset. |
 | HTTP 429 from Telegram | For `retry_after` up to 5 seconds, the bridge waits and retries, twice at most. Longer limits come back from `/send` as 502 with `retry_after`. Wait that long, then send again. |
+| `/healthz` is only `{"ok": true}` | That is the default liveness body. Set `HEALTH_DETAIL=true`, or send `Authorization: Bearer` with `HEALTHZ_TOKEN`, to see `ready` and `problems`. Turn detail off again after setup. |
 | `/healthz` shows `ready: false` with names in `problems` | Those settings were set but rejected, for example too short, wrong characters, or plain `http`. Fix each value in `.env`, load the file again, and redeploy. |
 | The person gets "Sorry — I couldn't pick that up just now" and the log says `forward` with `ok: false` | Grok Bot rejected the wake, usually because of a wrong URL or sender key. The bridge stopped typing, removed the 👀, and sent that one silent line. After the fix, the person sends the message again. `FORWARD_FAILURE_TEXT` changes the line or turns it `off`. |
 | Log `forward_ambiguous` | The forward timed out, was reset, or got a gateway error, so Grok Bot may still have the wake. Typing lasts until the answer or the lease. Frequent ones point to a slow routine URL or a flaky proxy. |
@@ -404,7 +405,7 @@ Rotate when they ask, or when a secret may have leaked. They generate each new v
 3. **Bot token.** BotFather `/revoke`, write the new token on `TELEGRAM_BOT_TOKEN` in `.env`, load the file again, and run `npm run set-webhook`.
 4. **Sender key.** Replace the routine. Create a new webhook routine with the same saved prompt. Give them the two links for the new folder id. They write the URL and sender key into `.env` and load the file again. Once a direct message works, delete the old routine.
 
-Check after each rotation: `/healthz` is ready, `webhook-info` shows an empty `last_error_message`, and a fresh direct message gets a reply.
+Check after each rotation: with detail enabled, `/healthz` is ready, `webhook-info` shows an empty `last_error_message`, and a fresh direct message gets a reply. Turn `HEALTH_DETAIL` off again afterward.
 
 ## Step 15: Uninstall
 

@@ -15,7 +15,7 @@ Using a fork? Replace the URL with your fork's, so the bot reads your copy.
 - One host. Cloudflare Workers, Vercel, or Node (Fly.io, Railway, Render, or a VPS).
 - A checkout of this repo.
 
-Other settings have defaults (see [Configuration](#configuration)). Setup is complete when `GET /healthz` returns `"ready": true` and an empty `problems` list.
+Other settings have defaults (see [Configuration](#configuration)). A platform probe is complete when `GET /healthz` returns `{"ok": true}`. While you are setting up, set `HEALTH_DETAIL=true` to also see `"ready": true` and an empty `problems` list, then turn it off. If `HEALTHZ_TOKEN` is set, that detail requires `Authorization: Bearer`.
 
 ### For agents
 
@@ -241,7 +241,7 @@ When a basic group becomes a supergroup, the chat id changes. The bridge logs `c
 - A **user id** admits that person in direct messages. It does not admit them in a group or supergroup. A teammate's user id also opens a private chat with the bot.
 - A **chat id** admits every sender inside that chat, once `ALLOWED_CHAT_TYPES` includes the chat's type (`private`, `group`, or `supergroup`). Groups stay closed until both the type and the chat id are set.
 
-Ids are plain decimal numbers (`42`, `-500`). `/healthz` lists any other value under `problems`.
+Ids are plain decimal numbers (`42`, `-500`). The detailed `/healthz` body lists any other value under `problems`.
 
 Messages sent as a chat (anonymous group admins, or posts as a channel) carry `sender_chat`. Only the chat's id in `ALLOWLIST_CHAT_IDS` admits them, and their wake has `from: null`. The bridge ignores automatic forwards from a linked channel.
 
@@ -272,7 +272,7 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `TYPING_REFRESH_MS` | no | Default `3000`. Clamped to 1000-4500. One typing action per chat per refresh. |
 | `TYPING_LEASE_MS` | no | Default `600000` (10 min). Clamped to 60000-3600000 and to `TYPING_MAX_MS`. Renewed by each progress line and heartbeat. |
 | `TYPING_MAX_MS` | no | Default `1800000` (30 min). Clamped to 60000-7200000. Ceiling per wake from its start. |
-| `PROGRESS_REACTION` | no | Default `👀`. An emoji from the Bot API's `ReactionTypeEmoji` list, or `off`. `/healthz` lists any other value under `problems`, and the bridge uses the default. |
+| `PROGRESS_REACTION` | no | Default `👀`. An emoji from the Bot API's `ReactionTypeEmoji` list, or `off`. The detailed `/healthz` body lists any other value under `problems`, and the bridge uses the default. |
 | `FORWARD_FAILURE_TEXT` | no | Default "Sorry — I couldn't pick that up just now. Mind sending it again?". Up to 500 characters, or `off`. |
 | `TELEGRAM_DRAFT_PLACEHOLDER` | no | Default `false`. Experimental `sendMessageDraft` placeholder in private chats. |
 | `CONTEXT_LIMIT` | no | Default `10` prior messages per chat and forum topic, up to 7 days old. |
@@ -281,6 +281,8 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `DEDUPE_TTL_MS` | no | Default `86400000` (24 h). How long `update_id` claims and operator `idempotency_key` records last. |
 | `MAX_BODY_BYTES` | no | Default `1000000`, minimum 1024. Enforced while streaming, on every host. |
 | `ALLOW_INSECURE_WEBHOOK` | no | Default `false`. Allows an `http://` Grok webhook for local development. |
+| `HEALTH_DETAIL` | no | Default `false`. When `true`, and `HEALTHZ_TOKEN` is unset, `GET /healthz` includes `ready`, `configured`, and `problems` (names only). |
+| `HEALTHZ_TOKEN` | no | Leave unset. At least 32 characters. When set, the detailed `/healthz` body requires `Authorization: Bearer`. A short value is ignored and listed under `problems`. |
 
 ## Endpoints
 
@@ -290,7 +292,7 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `POST` | `/send` | The assistant, with the reply token |
 | `POST` | `/typing/stop` | The assistant, with the reply token. Ends that wake. |
 | `POST` | `/typing/heartbeat` | The assistant, with the reply token. Renews the wake's lease. |
-| `GET` | `/healthz` | You, or your platform's health check |
+| `GET` | `/healthz` | A liveness check. `{"ok": true}` unless detail is opted in |
 
 ## Scripts
 
@@ -313,7 +315,7 @@ npm run cf:deploy
 ## Security
 
 - The bridge compares `X-Telegram-Bot-Api-Secret-Token` with `TELEGRAM_WEBHOOK_SECRET` in constant time. If the secret is unset or invalid, `/webhook` returns 503.
-- The Node server starts only with a valid webhook secret, `REPLY_TOKEN_SECRET`, and `PUBLIC_BASE_URL`. On Workers and Vercel, `/healthz` reports `ready: false` instead, and the bridge logs each dropped wake at `level: "error"`.
+- The Node server starts only with a valid webhook secret, `REPLY_TOKEN_SECRET`, and `PUBLIC_BASE_URL`. On Workers and Vercel the bridge logs each dropped wake at `level: "error"`. `GET /healthz` returns `{"ok": true}` and nothing else unless `HEALTH_DETAIL=true` or the request bears `HEALTHZ_TOKEN`. That detailed body reports `ready: false` and the setting names in `problems`.
 - An empty allowlist denies everyone.
 - Reply tokens are HMAC-SHA256 over the chat, topic, wake id, and expiry, checked in constant time. A final send retires the token.
 - The bridge builds `reply.send_url` from `PUBLIC_BASE_URL` only.

@@ -38,6 +38,7 @@ export function buildDeps(options: BuildDepsOptions): AppDeps {
     config.grokWebhookSenderKey,
     config.replyTokenSecret,
     config.outboundApiKey ?? "",
+    config.healthzToken ?? "",
   ]));
   const telegramOptions: Parameters<typeof createTelegramClient>[0] = {
     token: config.telegramBotToken,

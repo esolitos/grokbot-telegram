@@ -33,13 +33,20 @@ describe("webhook secret validation", () => {
 
 describe("key length floors", () => {
   it("does not issue or accept reply tokens with a weak signing secret", async () => {
-    const app = createTestApp({ env: testEnv({ REPLY_TOKEN_SECRET: "too-short" }) });
+    const app = createTestApp({ env: testEnv({ REPLY_TOKEN_SECRET: "too-short", HEALTH_DETAIL: "true" }) });
     await postUpdate(app.deps, app.tasks, dmUpdate("hello"));
     expect(grokCalls(app.calls)).toBe(0);
     expect(app.deps.config.replyTokenSecret).toBe("");
     expect(app.deps.config.problems).toContain("REPLY_TOKEN_SECRET");
     const health = await (await handleRequest(new Request("https://bridge.example/healthz"), app.deps)).json() as { ready: boolean };
     expect(health.ready).toBe(false);
+  });
+
+  it("ignores a short HEALTHZ_TOKEN", () => {
+    const config = loadConfig(testEnv({ HEALTHZ_TOKEN: "short-token" }));
+    expect(config.healthzToken).toBeNull();
+    expect(config.problems).toContain("HEALTHZ_TOKEN");
+    expect(loadConfig(testEnv()).healthDetail).toBe(false);
   });
 
   it("ignores a short OUTBOUND_API_KEY", async () => {

@@ -29,7 +29,7 @@ export async function handleCloudflare(request: Request, env: CfEnv, ctx: CfCont
     const deps = buildDeps({ env: record, typingMode: "once", waitUntil });
     const url = new URL(request.url);
     if ((request.method === "GET" || request.method === "HEAD") && (url.pathname === "/healthz" || url.pathname.endsWith("/healthz"))) {
-      return handleHealth(deps);
+      return handleHealth(request, deps);
     }
     return json(503, { ok: false, error: "durable_object_not_configured" });
   }
