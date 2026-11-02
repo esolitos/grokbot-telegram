@@ -37,12 +37,15 @@ export function isChatAdmitted(
 }
 
 /**
- * Supergroup and channel ids are `-100` plus the original id. Other negative
- * ids are basic groups. Positive ids are private chats.
+ * Supergroup and channel ids are `-100` followed by a 10-digit id, so the
+ * whole value is <= -1000000000000. A shorter negative id such as -100500 is
+ * a basic group. Positive ids are private chats.
  */
 export function chatTypeFromId(chatId: string): "private" | "group" | "supergroup" {
   if (!chatId.startsWith("-")) return "private";
-  return /^-100\d+$/.test(chatId) ? "supergroup" : "group";
+  const value = Number(chatId);
+  if (!Number.isSafeInteger(value)) return "group";
+  return value <= -1_000_000_000_000 ? "supergroup" : "group";
 }
 
 /**
