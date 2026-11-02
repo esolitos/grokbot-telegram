@@ -6,9 +6,11 @@ Connect a Grok Bot assistant to Telegram. People message the bot in a direct cha
 Read https://github.com/jexmarc/grokbot-telegram and walk me through setting you up to connect with me on Telegram.
 ```
 
+Using a fork? Replace the URL with your fork's, so the bot reads your copy.
+
 ## Requirements
 
-- Node.js 22 or newer, npm, and `openssl`.
+- Node.js 22.9 or newer, npm, and `openssl`.
 - A Telegram account and a bot from [@BotFather](https://t.me/BotFather).
 - One host. Cloudflare Workers, Vercel, or Node (Fly.io, Railway, Render, or a VPS).
 - A checkout of this repo.
