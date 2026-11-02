@@ -37,7 +37,7 @@ Read the Requirements section of the repo's `README.md`. Tell the person, in a f
 
 - a Telegram account,
 - an account on one host (Cloudflare Workers is recommended, or Vercel, or a Node host),
-- a terminal with Node.js 22 or newer, npm, `openssl`, and a checkout of the repo, and
+- a terminal with Node.js 22.9 or newer, npm, `openssl`, and a checkout of the repo, and
 - the group they want the bot in, if any.
 
 Check: they have each item, or they know how to get it.
