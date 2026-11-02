@@ -9,7 +9,7 @@ Use this skill when someone wants their Grok Bot to talk on Telegram, or asks yo
 
 Work **one step at a time**. Finish the check before you start the next step. If a check fails, stay on that step. Give the person one step at a time in your own words.
 
-The one-line prompt a person pastes to start is the fenced block at the top of `README.md`. It names `https://github.com/jexmarc/grokbot-telegram`.
+The one-line prompt a person pastes to start is the fenced block at the top of `README.md`. It names the upstream repo. A person on a fork swaps in their fork's URL.
 
 ## Rules for secrets
 
