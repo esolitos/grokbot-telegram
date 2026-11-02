@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createDurableBackend, type DoNamespace } from "../src/adapters/cloudflare/backend.js";
 import { handleDoFetch } from "../src/adapters/cloudflare/do-storage.js";
 import { ChatSession } from "../src/adapters/cloudflare/session.js";
-import { MemoryStore, scopeKey } from "../src/core/store.js";
+import { buildDeps } from "../src/core/deps.js";
+import { handleRequest } from "../src/core/handler.js";
+import { MemoryStore, scopeKey, type Store } from "../src/core/store.js";
 import type { ContextMessage, TypingScope } from "../src/core/types.js";
-import { memoryStorage, testEnv } from "./helpers.js";
+import { createFetchMock, dmUpdate, memoryStorage, NOW, postUpdate, testEnv } from "./helpers.js";
 
 async function op(storage: ReturnType<typeof memoryStorage>, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const response = await handleDoFetch(storage, testEnv(), new Request("https://do/op", {
@@ -94,6 +96,70 @@ describe("durable object dedupe storage", () => {
     await op(storage, { op: "context", scopeKey: "chat:1:thread:root", message: ctx(1, 1_000_000), limit: 10 });
     const result = await op(storage, { op: "context", scopeKey: "chat:1:thread:root", message: ctx(2, 1_000_000 + 8 * day), limit: 10 });
     expect(result.prior).toEqual([]);
+  });
+});
+
+describe("rate windows do not reset each other", () => {
+  async function sendThenWakeThenSend(store: Store): Promise<Response> {
+    let now = NOW;
+    const mock = createFetchMock();
+    const tasks: Promise<unknown>[] = [];
+    const deps = buildDeps({
+      env: testEnv({
+        SEND_RATE_LIMIT_MAX: "1",
+        SEND_RATE_LIMIT_WINDOW_MS: "60000",
+        RATE_LIMIT_WINDOW_MS: "1000",
+      }),
+      store,
+      fetchImpl: mock.fetchImpl,
+      now: () => now,
+      waitUntil: (promise) => tasks.push(promise),
+      typingMode: "once",
+      log: () => undefined,
+    });
+    await postUpdate(deps, tasks, dmUpdate("first", 1));
+    const token = (mock.calls.find((call) => call.url.startsWith("https://grok.example/hook"))?.body as { reply: { token: string } }).reply.token;
+    const send = (text: string) => handleRequest(new Request("https://bridge.example/send", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "42", text, idempotency_key: text }),
+    }), deps);
+    expect((await send("one")).status).toBe(200);
+    now += 1_000;
+    await postUpdate(deps, tasks, dmUpdate("second", 2));
+    return send("two");
+  }
+
+  function chatNamespace(): DoNamespace {
+    const sessions = new Map<string, ChatSession>();
+    return {
+      idFromName: (name) => ({ toString: () => name }),
+      get(id) {
+        const name = id.toString();
+        let session = sessions.get(name);
+        if (!session) {
+          session = new ChatSession({ storage: memoryStorage() }, {});
+          sessions.set(name, session);
+        }
+        const current = session;
+        return {
+          fetch(input, init) {
+            const request = input instanceof Request ? input : new Request(input, init);
+            return current.fetch(request);
+          },
+        };
+      },
+    };
+  }
+
+  it("keeps a send bucket after a wake opens a shorter window, in memory and in the durable object", async () => {
+    const memory = await sendThenWakeThenSend(new MemoryStore());
+    expect(memory.status).toBe(429);
+    expect(await memory.json()).toMatchObject({ ok: false, error: "send_rate_limited" });
+    const { store } = createDurableBackend(chatNamespace());
+    const durable = await sendThenWakeThenSend(store);
+    expect(durable.status).toBe(429);
+    expect(await durable.json()).toMatchObject({ ok: false, error: "send_rate_limited" });
   });
 });
 

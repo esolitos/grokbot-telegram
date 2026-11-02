@@ -119,7 +119,17 @@ const MAX_MEMORY_SCOPES = 1000;
 
 interface Bucket {
   windowStart: number;
+  /** This bucket's own window. Other buckets must not be judged against it. */
+  windowMs: number;
   count: number;
+}
+
+/** A bucket is due once its own window has elapsed. Missing metadata does not outlive `now`. */
+export function rateBucketExpired(bucket: { windowStart?: unknown; windowMs?: unknown }, now: number): boolean {
+  return typeof bucket.windowStart !== "number"
+    || typeof bucket.windowMs !== "number"
+    || bucket.windowMs <= 0
+    || now >= bucket.windowStart + bucket.windowMs;
 }
 
 export class MemoryStore implements Store {
@@ -162,14 +172,15 @@ export class MemoryStore implements Store {
     max: number,
   ): Promise<{ allowed: boolean; count: number }> {
     const windowStart = Math.floor(now / windowMs) * windowMs;
+    for (const [key, value] of this.buckets) {
+      if (rateBucketExpired(value, now)) this.buckets.delete(key);
+    }
     let bucket = this.buckets.get(bucketKey);
     if (!bucket || bucket.windowStart !== windowStart) {
-      bucket = { windowStart, count: 0 };
-      for (const [key, value] of this.buckets) {
-        if (value.windowStart < windowStart) this.buckets.delete(key);
-      }
+      bucket = { windowStart, windowMs, count: 0 };
     }
     bucket.count += 1;
+    bucket.windowMs = windowMs;
     this.buckets.set(bucketKey, bucket);
     return { allowed: bucket.count <= max, count: bucket.count };
   }

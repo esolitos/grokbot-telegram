@@ -10,7 +10,7 @@ import {
 } from "../../core/typing.js";
 import { createTelegramClient } from "../../core/telegram.js";
 import { collectSecrets, createLogger } from "../../core/log.js";
-import { freshContext, normalizeSendRecord, type SendRecord } from "../../core/store.js";
+import { freshContext, normalizeSendRecord, rateBucketExpired, type SendRecord } from "../../core/store.js";
 import type { ContextMessage, TypingScope, TypingStart } from "../../core/types.js";
 
 export interface DoStorage {
@@ -25,6 +25,7 @@ export interface DoStorage {
 
 interface Bucket {
   windowStart: number;
+  windowMs: number;
   count: number;
 }
 
@@ -227,13 +228,14 @@ async function rate(storage: DoStorage, body: DoOp): Promise<{ allowed: boolean;
   const max = body.max ?? 20;
   const windowStart = Math.floor(now / windowMs) * windowMs;
   const buckets = (await storage.get<Record<string, Bucket>>("buckets")) ?? {};
-  let bucket = buckets[bucketKey];
-  if (!bucket || bucket.windowStart !== windowStart) bucket = { windowStart, count: 0 };
-  bucket.count += 1;
-  buckets[bucketKey] = bucket;
   for (const [key, value] of Object.entries(buckets)) {
-    if (value.windowStart !== windowStart) delete buckets[key];
+    if (rateBucketExpired(value, now)) delete buckets[key];
   }
+  let bucket = buckets[bucketKey];
+  if (!bucket || bucket.windowStart !== windowStart) bucket = { windowStart, windowMs, count: 0 };
+  bucket.count += 1;
+  bucket.windowMs = windowMs;
+  buckets[bucketKey] = bucket;
   await storage.put("buckets", buckets);
   return { allowed: bucket.count <= max, count: bucket.count };
 }
