@@ -22,6 +22,14 @@ describe("memory store", () => {
     expect(await store.claimUpdate(5, 2_000, 500)).toBe("new");
   });
 
+  it("rate limits sends per chat inside a fixed window and resets on the next one", async () => {
+    const store = new MemoryStore();
+    expect((await store.hitSendRate("42", 0, 1_000, 1)).allowed).toBe(true);
+    expect((await store.hitSendRate("42", 10, 1_000, 1)).allowed).toBe(false);
+    expect((await store.hitSendRate("7", 10, 1_000, 1)).allowed).toBe(true);
+    expect((await store.hitSendRate("42", 1_000, 1_000, 1)).allowed).toBe(true);
+  });
+
   it("rate limits inside a fixed window and resets on the next one", async () => {
     const store = new MemoryStore();
     expect((await store.hitRate("chat:1", 0, 1_000, 2)).allowed).toBe(true);

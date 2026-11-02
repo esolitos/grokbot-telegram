@@ -61,6 +61,23 @@ export async function handleSend(request: Request, deps: AppDeps): Promise<Respo
     return json(401, { ok: false, error: "wake_closed" });
   }
 
+  // Repeats and closed wakes returned above, so they do not spend this budget.
+  // Reply tokens and OUTBOUND_API_KEY share one bucket per chat.
+  const sendRate = await deps.store.hitSendRate(
+    chatId,
+    deps.now(),
+    deps.config.sendRateLimitWindowMs,
+    deps.config.sendRateLimitMax,
+  );
+  if (!sendRate.allowed) {
+    if (sendKey) await deps.store.releaseSend(sendKey);
+    const windowMs = deps.config.sendRateLimitWindowMs;
+    const windowStart = Math.floor(deps.now() / windowMs) * windowMs;
+    const retryAfter = Math.max(1, Math.ceil((windowStart + windowMs - deps.now()) / 1000));
+    deps.log({ event: "send_rate_limited", chat_id: chatId, wake_id: auth.wakeId });
+    return json(429, { ok: false, error: "send_rate_limited", retry_after: retryAfter });
+  }
+
   // Non-final sends are progress lines. A repeat of a delivered key returned above
   // and does not count. Anything past the cap is refused before Telegram sees it.
   if (!final && auth.wakeId) {

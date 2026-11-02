@@ -134,6 +134,8 @@ describe("progress settings", () => {
     expect(config.typingMaxMs).toBe(1_800_000);
     expect(config.replyTokenTtlSeconds).toBe(600);
     expect(config.maxNonFinalSends).toBe(3);
+    expect(config.sendRateLimitMax).toBe(30);
+    expect(config.sendRateLimitWindowMs).toBe(60_000);
     expect(config.progressReaction).toBe("👀");
     expect(config.forwardFailureText).toBe("Sorry — I couldn't pick that up just now. Mind sending it again?");
     expect(config.draftPlaceholder).toBe(false);

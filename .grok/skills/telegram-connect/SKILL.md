@@ -376,6 +376,7 @@ If the group was upgraded from a basic group, its chat id changed. Look for a `c
 | Log reason `duplicate` or `duplicate_message`, or `edit_ignored` | Telegram retried, or the person edited a message that already woke the bot. Dedupe caught it. One wake is enough. |
 | The person gets the same answer two or more times | Count the `wake` log lines for that message. Two wakes mean the update reached a new Vercel or Node process. One wake means the assistant sent twice: look for `send_repeated` or `send_ambiguous`, and save the step 9 prompt on the routine again. |
 | Log reason `rate_limited` | More than 20 wakes in a minute from that chat or person. Wait, or raise `RATE_LIMIT_MAX`. |
+| `/send` returns 429 `send_rate_limited` | That chat sent more than `SEND_RATE_LIMIT_MAX` messages in the window (30 per minute by default). Wait `retry_after` seconds. Leave `OUTBOUND_API_KEY` unset unless you send proactive messages. |
 | Grok Bot returns 401 on the wake | `GROK_WEBHOOK_SENDER_KEY` is missing or wrong. |
 | `/send` returns 401 `expired` or `wake_closed` | The reply token's 10 minutes ran out, or a final message retired it. They send a new Telegram message. |
 | `/send` returns 429 `progress_limit` | That wake already sent `MAX_NON_FINAL_SENDS` progress lines (3 by default). The answer still goes out with `"final": true`. |

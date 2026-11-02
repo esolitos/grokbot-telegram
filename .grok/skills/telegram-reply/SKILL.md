@@ -99,6 +99,7 @@ The person sees one answer per wake.
 | 400 `bad_idempotency_key` | The key was empty, too long, or had other characters. | Fix the key, or leave it out. |
 | 401 `expired` | The 10 minute token lapsed. | Stop. They can message again. |
 | 429 `progress_limit` | This wake already used its non-final sends (3 by default). | Stop sending progress lines. Send the answer with `"final": true`. |
+| 429 `send_rate_limited` | This chat is over its `/send` budget (30 per minute by default). `retry_after` is seconds. | Wait, then send once. |
 | 401 `wake_closed` | You already sent `final: true` for this wake. | Stop. |
 | 401 anything else | The token is missing or damaged. | Stop. Use only the token from the payload. |
 | 403 `scope` | Chat or topic differs from the token's. | Send again with `reply.chat_id` and `reply.message_thread_id`. |
@@ -113,4 +114,4 @@ A 2xx from the routine webhook that woke you means the wake was accepted. Your r
 
 - Answer only the group messages that woke you. The bridge already decided which ones.
 - Use the reply token for this wake only. It expires with the wake.
-- `OUTBOUND_API_KEY` is an operator credential for proactive sends, and it stays with the operator.
+- `OUTBOUND_API_KEY` is an operator credential for proactive sends. Leave it unset unless the operator sends messages outside a wake, and it stays with the operator.
