@@ -63,12 +63,19 @@ export async function handleSend(request: Request, deps: AppDeps): Promise<Respo
 
   // Repeats and closed wakes returned above, so they do not spend this budget.
   // Reply tokens and OUTBOUND_API_KEY share one bucket per chat.
-  const sendRate = await deps.store.hitSendRate(
-    chatId,
-    deps.now(),
-    deps.config.sendRateLimitWindowMs,
-    deps.config.sendRateLimitMax,
-  );
+  // A throw here is before Telegram is called, so the claim must not stay pending.
+  let sendRate: { allowed: boolean; count: number };
+  try {
+    sendRate = await deps.store.hitSendRate(
+      chatId,
+      deps.now(),
+      deps.config.sendRateLimitWindowMs,
+      deps.config.sendRateLimitMax,
+    );
+  } catch (err) {
+    if (sendKey) await deps.store.releaseSend(sendKey).catch(() => undefined);
+    throw err;
+  }
   if (!sendRate.allowed) {
     if (sendKey) await deps.store.releaseSend(sendKey);
     const windowMs = deps.config.sendRateLimitWindowMs;
@@ -82,12 +89,17 @@ export async function handleSend(request: Request, deps: AppDeps): Promise<Respo
   // and does not count. Anything past the cap is refused before Telegram sees it.
   if (!final && auth.wakeId) {
     const progressTtl = Math.max(1000, auth.expiresAtMs - deps.now());
-    const count = await deps.store.adjustProgress(auth.wakeId, 1, deps.now(), progressTtl);
-    if (count > deps.config.maxNonFinalSends) {
-      await deps.store.adjustProgress(auth.wakeId, -1, deps.now(), progressTtl);
-      if (sendKey) await deps.store.releaseSend(sendKey);
-      deps.log({ event: "progress_limit", chat_id: chatId, wake_id: auth.wakeId });
-      return json(429, { ok: false, error: "progress_limit" });
+    try {
+      const count = await deps.store.adjustProgress(auth.wakeId, 1, deps.now(), progressTtl);
+      if (count > deps.config.maxNonFinalSends) {
+        await deps.store.adjustProgress(auth.wakeId, -1, deps.now(), progressTtl);
+        if (sendKey) await deps.store.releaseSend(sendKey);
+        deps.log({ event: "progress_limit", chat_id: chatId, wake_id: auth.wakeId });
+        return json(429, { ok: false, error: "progress_limit" });
+      }
+    } catch (err) {
+      if (sendKey) await deps.store.releaseSend(sendKey).catch(() => undefined);
+      throw err;
     }
   }
 

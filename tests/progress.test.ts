@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDeps } from "../src/core/deps.js";
 import { handleRequest } from "../src/core/handler.js";
-import { scopeKey } from "../src/core/store.js";
+import { MemoryStore, scopeKey } from "../src/core/store.js";
 import {
   createFetchMock,
   defaultResponse,
@@ -164,6 +164,44 @@ describe("/send final and interim semantics", () => {
       body: JSON.stringify({ chat_id: "42", text: "also this chat" }),
     }), bridge.deps);
     expect(sameChat.status).toBe(429);
+  });
+
+  it("releases the send claim when a pre-send store check throws", async () => {
+    const store = new MemoryStore();
+    const mock = createFetchMock();
+    const tasks: Promise<unknown>[] = [];
+    const deps = buildDeps({
+      env: testEnv(),
+      store,
+      fetchImpl: mock.fetchImpl,
+      now: () => NOW,
+      waitUntil: (promise) => tasks.push(promise),
+      typingMode: "once",
+      log: () => undefined,
+    });
+    await postUpdate(deps, tasks, dmUpdate("q", 1));
+    const token = (mock.calls.find((call) => call.url.startsWith("https://grok.example/hook"))?.body as { reply: { token: string } }).reply.token;
+    const send = (key: string) => handleRequest(new Request("https://bridge.example/send", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "42", text: key, idempotency_key: key }),
+    }), deps);
+
+    const realRate = store.hitSendRate.bind(store);
+    store.hitSendRate = async () => {
+      throw new Error("rate_down");
+    };
+    expect((await send("rate-key")).status).toBe(500);
+    store.hitSendRate = realRate;
+    expect((await send("rate-key")).status).toBe(200);
+
+    const realProgress = store.adjustProgress.bind(store);
+    store.adjustProgress = async () => {
+      throw new Error("progress_down");
+    };
+    expect((await send("progress-key")).status).toBe(500);
+    store.adjustProgress = realProgress;
+    expect((await send("progress-key")).status).toBe(200);
   });
 
   it("rejects non-final sends past the per-wake cap and still accepts the final answer", async () => {
