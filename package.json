@@ -5,7 +5,7 @@
   "description": "Connect a Grok Bot to Telegram direct messages and group chats.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env --import tsx src/adapters/node/server.ts",
