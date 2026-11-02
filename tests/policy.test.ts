@@ -34,7 +34,7 @@ describe("allowlist", () => {
     const groups = loadConfig({
       TELEGRAM_BOT_USERNAME: "@testbot",
       ALLOWLIST_USER_IDS: "42, 7",
-      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWLIST_CHAT_IDS: "-500,-100500,-1001234567890",
       ALLOWED_CHAT_TYPES: "private,group,supergroup",
     });
     expect(isChatAdmitted("42", "42", "private", config)).toBe(true);
@@ -46,26 +46,30 @@ describe("allowlist", () => {
     expect(isChatAdmitted("100", "-999", "supergroup", groups)).toBe(false);
     expect(isChatAdmitted(null, null, "private", groups)).toBe(false);
     expect(chatTypeFromId("-500")).toBe("group");
-    expect(chatTypeFromId("-100500")).toBe("supergroup");
+    expect(chatTypeFromId("-100500")).toBe("group");
+    expect(chatTypeFromId("-1000000000000")).toBe("supergroup");
+    expect(chatTypeFromId("-1001234567890")).toBe("supergroup");
     expect(chatTypeFromId("42")).toBe("private");
   });
 
   it("allows proactive sends only to listed chats of an enabled type, or listed users' DMs", () => {
     const groups = loadConfig({
       ALLOWLIST_USER_IDS: "42, 7",
-      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWLIST_CHAT_IDS: "-500,-100500,-1001234567890",
       ALLOWED_CHAT_TYPES: "private,group,supergroup",
     });
     expect(isOutboundChatAllowed("-500", config)).toBe(false);
     expect(isOutboundChatAllowed("42", config)).toBe(true);
     expect(isOutboundChatAllowed("-500", groups)).toBe(true);
     expect(isOutboundChatAllowed("-100500", groups)).toBe(true);
+    expect(isOutboundChatAllowed("-1001234567890", groups)).toBe(true);
     expect(isOutboundChatAllowed("-999", groups)).toBe(false);
     const supergroupsOnly = loadConfig({
-      ALLOWLIST_CHAT_IDS: "-500,-100500",
+      ALLOWLIST_CHAT_IDS: "-500,-100500,-1001234567890",
       ALLOWED_CHAT_TYPES: "supergroup",
     });
-    expect(isOutboundChatAllowed("-100500", supergroupsOnly)).toBe(true);
+    expect(isOutboundChatAllowed("-1001234567890", supergroupsOnly)).toBe(true);
+    expect(isOutboundChatAllowed("-100500", supergroupsOnly)).toBe(false);
     expect(isOutboundChatAllowed("-500", supergroupsOnly)).toBe(false);
     expect(isOutboundChatAllowed("42", supergroupsOnly)).toBe(false);
   });
