@@ -17,6 +17,8 @@ export function testEnv(overrides: Record<string, string> = {}): Record<string, 
     PUBLIC_BASE_URL: "https://bridge.example",
     ALLOWLIST_USER_IDS: "42",
     ALLOWLIST_CHAT_IDS: "-500",
+    // Production default is private. Tests that exercise groups opt in.
+    ALLOWED_CHAT_TYPES: "private,group,supergroup",
     ...overrides,
   };
 }

@@ -48,7 +48,7 @@ Ask which they want:
 
 - **Direct messages only.** You will allowlist their numeric user id.
 - **One group.** You will allowlist that group's chat id. Everyone in the group can talk to the bot. Their direct messages with the bot stay closed.
-- **Both.** User id plus chat id. Tell them that a user id admits that person in direct messages and in every chat they speak in.
+- **Both.** User id plus chat id. A user id admits that person in direct messages only. The group also needs its chat id, and `ALLOWED_CHAT_TYPES` must include `group` or `supergroup`.
 
 Check: they picked one of the three. Note the choice for later steps.
 
@@ -129,11 +129,11 @@ Check: you have the user id, the chat id, or both, to match step 1.
 
 ## Step 6: Choose the allowlist
 
-- Direct messages only: `ALLOWLIST_USER_IDS` is their user id. `ALLOWLIST_CHAT_IDS` stays empty.
-- Group only: `ALLOWLIST_CHAT_IDS` is the group id. `ALLOWLIST_USER_IDS` stays empty unless they also want direct messages.
-- Both: set both.
+- Direct messages only: `ALLOWLIST_USER_IDS` is their user id. `ALLOWLIST_CHAT_IDS` stays empty. Leave `ALLOWED_CHAT_TYPES` at `private`.
+- Group only: `ALLOWLIST_CHAT_IDS` is the group id. Set `ALLOWED_CHAT_TYPES` to `group`, `supergroup`, or both, to match that chat. `ALLOWLIST_USER_IDS` stays empty unless they also want direct messages. With the default `private`, group messages are ignored.
+- Both: set both lists, and set `ALLOWED_CHAT_TYPES` to `private` plus `group` or `supergroup`.
 
-If a teammate's user id is about to go in `ALLOWLIST_USER_IDS`, remind them that this person can then message the bot directly.
+A user id does not admit that person in a group. If a teammate's user id is about to go in `ALLOWLIST_USER_IDS`, remind them that this person can then message the bot directly.
 
 The bridge denies every sender while both lists are empty.
 
@@ -368,9 +368,10 @@ If the group was upgraded from a basic group, its chat id changed. Look for a `c
 | `webhook-info` shows `last_error_message` | The bridge returned a non-2xx or timed out. Read the message. The usual causes are a wrong secret or a bad URL. Fix it, then run `npm run set-webhook` again. |
 | `pending_update_count` keeps rising | The HTTPS endpoint is down, or the URL is missing the `/webhook` path. `curl` the `/healthz` URL. |
 | `getUpdates` is empty | `npm run get-updates` takes no offset. Run `npm run webhook-info`. When `url` is set, `pending_update_count` can be 1 and `getUpdates` is still empty. Run `npm run delete-webhook`, then `npm run get-updates`, then `npm run set-webhook` again. |
-| The bot is silent in a group, and direct messages work | The message needs a mention, `/ask`, `/help`, or a reply to the bot. With privacy mode on, a bare `/ask` can go to another bot, and a mention can fail to arrive. Try `/ask@BotUsername`. |
+| The bot is silent in a group, and direct messages work | `ALLOWED_CHAT_TYPES` must include `group` or `supergroup`, and `ALLOWLIST_CHAT_IDS` must include that chat. A user id is not enough. The message also needs a mention, `/ask`, `/help`, or a reply to the bot. With privacy mode on, a bare `/ask` can go to another bot, and a mention can fail to arrive. Try `/ask@BotUsername`. |
 | The bot sees commands, but replies and mentions are missing | Privacy mode changed after the bot joined. Remove the bot and add it again. |
-| Log reason `not_allowlisted` | Add that `user_id` or `chat_id`, and redeploy. A user id also opens direct messages. |
+| Log reason `chat_type` | That chat's type is not in `ALLOWED_CHAT_TYPES`. The default is `private`. Add `group` or `supergroup` only for chats you list. |
+| Log reason `not_allowlisted` | Add that `user_id` for a direct message, or that `chat_id` for a group, and redeploy. A user id opens direct messages only. |
 | Log reason `not_addressed` | Group chatter, working as designed. Mention, command, or reply. |
 | Log reason `duplicate` or `duplicate_message`, or `edit_ignored` | Telegram retried, or the person edited a message that already woke the bot. Dedupe caught it. One wake is enough. |
 | The person gets the same answer two or more times | Count the `wake` log lines for that message. Two wakes mean the update reached a new Vercel or Node process. One wake means the assistant sent twice: look for `send_repeated` or `send_ambiguous`, and save the step 9 prompt on the routine again. |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalId, fatalConfigProblems, loadConfig, normalizePublicBaseUrl } from "../src/core/config.js";
+import { canonicalId, fatalConfigProblems, loadConfig, normalizePublicBaseUrl, parseAllowedChatTypes } from "../src/core/config.js";
 import { handleRequest } from "../src/core/handler.js";
 import { createTestApp, dmUpdate, postUpdate, testEnv } from "./helpers.js";
 
@@ -83,6 +83,20 @@ describe("public base url", () => {
     await postUpdate(app.deps, app.tasks, dmUpdate("hello"));
     expect(grokCalls(app.calls)).toBe(0);
     expect(app.deps.config.problems).toContain("PUBLIC_BASE_URL");
+  });
+});
+
+describe("allowed chat types", () => {
+  it("defaults to private and reports unknown names without keeping them", () => {
+    expect([...loadConfig({}).allowedChatTypes]).toEqual(["private"]);
+    expect([...parseAllowedChatTypes("", [])]).toEqual(["private"]);
+    const bad = loadConfig({ ALLOWED_CHAT_TYPES: "channel, nope" });
+    expect([...bad.allowedChatTypes]).toEqual(["private"]);
+    expect(bad.problems).toContain("ALLOWED_CHAT_TYPES");
+    const mixed = loadConfig({ ALLOWED_CHAT_TYPES: " Supergroup, channel " });
+    expect([...mixed.allowedChatTypes]).toEqual(["supergroup"]);
+    expect(mixed.problems).toContain("ALLOWED_CHAT_TYPES");
+    expect([...loadConfig({ ALLOWED_CHAT_TYPES: "group,supergroup" }).allowedChatTypes]).toEqual(["group", "supergroup"]);
   });
 });
 

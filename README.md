@@ -70,7 +70,7 @@ npm run get-updates
 
 `npm run get-updates` takes no offset. Read `message.from.id` and `message.chat.id` from the JSON. When `webhook-info` shows a `url`, `getUpdates` comes back empty even if `pending_update_count` is 1. Run `npm run delete-webhook`, then `npm run get-updates` again. You register the webhook again at the end of this section.
 
-Write the ids into `.env`. `ALLOWLIST_USER_IDS` admits that person in direct messages and in every chat they speak in. `ALLOWLIST_CHAT_IDS` admits every sender inside that chat. With both empty, the bridge denies every sender. Leave `PUBLIC_BASE_URL`, `GROK_WEBHOOK_URL`, and `GROK_WEBHOOK_SENDER_KEY` out of the file until the steps below.
+Write the ids into `.env`. `ALLOWLIST_USER_IDS` admits that person in direct messages. `ALLOWLIST_CHAT_IDS` admits every sender inside that chat, and only when `ALLOWED_CHAT_TYPES` includes the chat's type. With both lists empty, the bridge denies every sender. The default `ALLOWED_CHAT_TYPES` is `private`, so a group stays quiet until you add `group` or `supergroup`. Leave `PUBLIC_BASE_URL`, `GROK_WEBHOOK_URL`, and `GROK_WEBHOOK_SENDER_KEY` out of the file until the steps below.
 
 ### Cloudflare Workers
 
@@ -222,13 +222,13 @@ The details:
 
 ## Group chats
 
-In a private chat, every message from an allowlisted sender or chat wakes the bot. In a group or supergroup, the bot wakes when a message:
+By default only private chats wake the bot (`ALLOWED_CHAT_TYPES=private`). A group or supergroup wakes the bot only when that type is listed in `ALLOWED_CHAT_TYPES` and the chat id is in `ALLOWLIST_CHAT_IDS`. A user id does not open a group. In an allowed private chat, every message from an allowlisted sender or chat wakes the bot. In an allowed group or supergroup, the bot wakes when a message:
 
 - mentions `@YourBot`,
 - starts with a command from `WAKE_COMMANDS`, such as `/ask` or `/ask@YourBot`, or
 - replies to one of the bot's own messages.
 
-The bridge keeps other group messages in a per-topic buffer (`CONTEXT_LIMIT`, 10 by default) and attaches them to the next wake as context. It ignores messages from other bots. In Telegram's default privacy mode the bot receives `/ask@YourBot`, replies to its own messages, and service messages. Turn privacy off with BotFather `/setprivacy`, or make the bot an admin, then remove the bot from the group and add it again.
+The bridge keeps other messages from an allowed group in a per-topic buffer (`CONTEXT_LIMIT`, 10 by default) and attaches them to the next wake as context. Messages from a chat whose type is off, or from a group that is not listed, are dropped before that buffer, so a stranger's `reply_to` text never reaches the bot. It ignores messages from other bots. In Telegram's default privacy mode the bot receives `/ask@YourBot`, replies to its own messages, and service messages. Turn privacy off with BotFather `/setprivacy`, or make the bot an admin, then remove the bot from the group and add it again.
 
 When the bot is in the groups you want, send BotFather `/setjoingroups` and choose Disable to keep it to those groups.
 
@@ -238,8 +238,8 @@ When a basic group becomes a supergroup, the chat id changes. The bridge logs `c
 
 ## Allowlist
 
-- A **user id** admits that person in direct messages and in any chat they speak in. A teammate's user id also opens a private chat with the bot, so use the group's chat id to admit only the group.
-- A **chat id** admits every sender inside that chat.
+- A **user id** admits that person in direct messages. It does not admit them in a group or supergroup. A teammate's user id also opens a private chat with the bot.
+- A **chat id** admits every sender inside that chat, once `ALLOWED_CHAT_TYPES` includes the chat's type (`private`, `group`, or `supergroup`). Groups stay closed until both the type and the chat id are set.
 
 Ids are plain decimal numbers (`42`, `-500`). `/healthz` lists any other value under `problems`.
 
@@ -259,8 +259,9 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `GROK_WEBHOOK_SENDER_KEY` | yes | Sent as `Authorization: Bearer`. A missing key gets a 401 from Grok Bot. |
 | `REPLY_TOKEN_SECRET` | yes | HMAC key for reply tokens. At least 32 characters, unique per bridge. |
 | `PUBLIC_BASE_URL` | yes | `https` origin for `reply.send_url` (`http` for localhost). Origin only. |
-| `ALLOWLIST_USER_IDS` | one of these | Comma-separated numeric user ids. |
-| `ALLOWLIST_CHAT_IDS` | one of these | Comma-separated chat ids. |
+| `ALLOWLIST_USER_IDS` | one of these | Comma-separated numeric user ids. Direct messages only. |
+| `ALLOWLIST_CHAT_IDS` | one of these | Comma-separated chat ids. Admits every sender in that chat when its type is allowed. |
+| `ALLOWED_CHAT_TYPES` | no | Default `private`. Comma-separated `private`, `group`, `supergroup`. Unknown names are dropped and listed under `problems`. A group type applies only to chat ids in `ALLOWLIST_CHAT_IDS`. |
 | `PATH_PREFIX` | no | Mount prefix, for example `/bridge`. |
 | `WAKE_COMMANDS` | no | Default `/ask,/help`. |
 | `OUTBOUND_API_KEY` | no | Key for proactive sends. At least 32 characters. |
@@ -319,7 +320,7 @@ npm run cf:deploy
 - Telegram calls go only to `api.telegram.org`, and only with a well-formed bot token.
 - `/send` checks the bearer before it reads the body.
 - The bridge splits outgoing text at 4096 UTF-16 units, on a paragraph, then a line, then a hard cut that keeps surrogate pairs whole. It sends plain text. On HTTP 429 it waits `retry_after` when that is 5 seconds or less, at most twice, and returns longer waits to the caller as `retry_after`.
-- Logs are single-line JSON. They carry drop reasons (`not_allowlisted`, `not_addressed`, `duplicate`, `rate_limited`) with chat and user ids, which you need for the allowlist. The logger redacts secrets and bearer values.
+- Logs are single-line JSON. They carry drop reasons (`chat_type`, `not_allowlisted`, `not_addressed`, `duplicate`, `rate_limited`) with chat and user ids, which you need for the allowlist. The logger redacts secrets and bearer values.
 - Keep secrets in the gitignored `.env`. Cloudflare, Vercel, Fly.io, Railway, Render, and a VPS load that file. `.env.example` holds placeholders.
 
 ## License

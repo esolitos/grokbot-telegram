@@ -1,5 +1,5 @@
 import { classifyAddress, messageText, senderUser, topicThreadId } from "./address.js";
-import { isAllowlisted } from "./allowlist.js";
+import { isChatAdmitted } from "./allowlist.js";
 import { secretsEqual } from "./crypto.js";
 import { safeErrorMessage } from "./log.js";
 import { runInBackground, type AppDeps } from "./deps.js";
@@ -112,7 +112,20 @@ async function handleClaimedUpdate(
     return json(200, { ok: true });
   }
 
-  if (!isAllowlisted(userId, chatId, deps.config)) {
+  const chatType = message.chat.type;
+  if (!deps.config.allowedChatTypes.has(chatType)) {
+    deps.log({
+      event: "update_dropped",
+      reason: "chat_type",
+      update_id: update.update_id,
+      chat_id: chatId,
+      user_id: userId,
+      chat_type: ["private", "group", "supergroup", "channel"].includes(chatType) ? chatType : "other",
+    });
+    return json(200, { ok: true });
+  }
+
+  if (!isChatAdmitted(userId, chatId, chatType, deps.config)) {
     deps.log({
       event: "update_dropped",
       reason: "not_allowlisted",
