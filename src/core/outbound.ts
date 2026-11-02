@@ -61,6 +61,19 @@ export async function handleSend(request: Request, deps: AppDeps): Promise<Respo
     return json(401, { ok: false, error: "wake_closed" });
   }
 
+  // Non-final sends are progress lines. A repeat of a delivered key returned above
+  // and does not count. Anything past the cap is refused before Telegram sees it.
+  if (!final && auth.wakeId) {
+    const progressTtl = Math.max(1000, auth.expiresAtMs - deps.now());
+    const count = await deps.store.adjustProgress(auth.wakeId, 1, deps.now(), progressTtl);
+    if (count > deps.config.maxNonFinalSends) {
+      await deps.store.adjustProgress(auth.wakeId, -1, deps.now(), progressTtl);
+      if (sendKey) await deps.store.releaseSend(sendKey);
+      deps.log({ event: "progress_limit", chat_id: chatId, wake_id: auth.wakeId });
+      return json(429, { ok: false, error: "progress_limit" });
+    }
+  }
+
   // A progress line inside a wake goes out silently; the final answer notifies.
   // Operator sends (OUTBOUND_API_KEY, no wake) notify unless told otherwise.
   const silent = typeof body.disable_notification === "boolean"

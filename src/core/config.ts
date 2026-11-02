@@ -17,6 +17,8 @@ export interface Config {
   allowedChatTypes: ReadonlySet<string>;
   wakeCommands: ReadonlySet<string>;
   replyTokenTtlSeconds: number;
+  /** Non-final `/send` calls accepted for one wake. Further ones are rejected. */
+  maxNonFinalSends: number;
   typingRefreshMs: number;
   /** Initial lease per wake; each interim /send or heartbeat renews it from "now". */
   typingLeaseMs: number;
@@ -230,7 +232,8 @@ export function loadConfig(env: EnvSource): Config {
     allowlistChatIds,
     allowedChatTypes,
     wakeCommands: new Set(parseCommandList(readString(env, "WAKE_COMMANDS"))),
-    replyTokenTtlSeconds: readBoundedInt(env, "REPLY_TOKEN_TTL_SECONDS", 1800, 60, 3600),
+    replyTokenTtlSeconds: readBoundedInt(env, "REPLY_TOKEN_TTL_SECONDS", 600, 60, 3600),
+    maxNonFinalSends: readBoundedInt(env, "MAX_NON_FINAL_SENDS", 3, 0, 20),
     typingRefreshMs,
     typingLeaseMs,
     typingMaxMs,

@@ -97,6 +97,10 @@ export function createDurableBackend(namespace: DoNamespace): { store: Store; ty
     async releaseSend(key) {
       await call(namespace, "dedupe", { op: "send.release", sendKey: key });
     },
+    async adjustProgress(wakeId, delta, now, ttlMs) {
+      const result = await call(namespace, "dedupe", { op: "progress.add", wakeId, delta, now, ttlMs });
+      return typeof result.count === "number" ? result.count : 0;
+    },
   };
 
   // The chat's Durable Object owns typing state, the reaction, and the alarm, so they survive eviction.

@@ -68,6 +68,16 @@ describe("durable object dedupe storage", () => {
     expect(await op(storage, { op: "send.claim", now: 2001, ttlMs: 500 })).toMatchObject({ claimed: false });
   });
 
+  it("counts non-final sends per wake and drops the counter when it expires", async () => {
+    const storage = memoryStorage();
+    expect(await op(storage, { op: "progress.add", wakeId: "w1", delta: 1, now: 1000, ttlMs: 100 })).toEqual({ count: 1 });
+    expect(await op(storage, { op: "progress.add", wakeId: "w1", delta: 1, now: 1050, ttlMs: 100 })).toEqual({ count: 2 });
+    expect(await op(storage, { op: "progress.add", wakeId: "w1", delta: -1, now: 1050, ttlMs: 100 })).toEqual({ count: 1 });
+    expect(await op(storage, { op: "progress.add", wakeId: "w2", delta: 1, now: 1050, ttlMs: 100 })).toEqual({ count: 1 });
+    expect(await op(storage, { op: "progress.add", wakeId: "w1", delta: 1, now: 1200, ttlMs: 100 })).toEqual({ count: 1 });
+    expect(await op(storage, { op: "progress.add" })).toEqual({ count: 0 });
+  });
+
   it("closes wakes per key with expiry", async () => {
     const storage = memoryStorage();
     await op(storage, { op: "wake.close", wakeId: "w1", now: 1000, ttlMs: 100 });

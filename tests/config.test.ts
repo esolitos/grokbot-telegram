@@ -132,7 +132,8 @@ describe("progress settings", () => {
     expect(config.typingRefreshMs).toBe(3000);
     expect(config.typingLeaseMs).toBe(600_000);
     expect(config.typingMaxMs).toBe(1_800_000);
-    expect(config.replyTokenTtlSeconds).toBe(1800);
+    expect(config.replyTokenTtlSeconds).toBe(600);
+    expect(config.maxNonFinalSends).toBe(3);
     expect(config.progressReaction).toBe("👀");
     expect(config.forwardFailureText).toBe("Sorry — I couldn't pick that up just now. Mind sending it again?");
     expect(config.draftPlaceholder).toBe(false);
@@ -147,6 +148,8 @@ describe("progress settings", () => {
     expect(loadConfig(testEnv({ TYPING_MAX_MS: "99999999" })).typingMaxMs).toBe(7_200_000);
     expect(loadConfig(testEnv({ REPLY_TOKEN_TTL_SECONDS: "0" })).replyTokenTtlSeconds).toBe(60);
     expect(loadConfig(testEnv({ REPLY_TOKEN_TTL_SECONDS: "86400" })).replyTokenTtlSeconds).toBe(3600);
+    expect(loadConfig(testEnv({ MAX_NON_FINAL_SENDS: "0" })).maxNonFinalSends).toBe(0);
+    expect(loadConfig(testEnv({ MAX_NON_FINAL_SENDS: "100" })).maxNonFinalSends).toBe(20);
   });
 
   it("accepts an allowed reaction emoji, can turn it off, and reports an unknown one", () => {

@@ -47,6 +47,15 @@ describe("memory store", () => {
     expect(await store.claimMessage("42", 11, 1500, 1000)).toBe("new");
   });
 
+  it("counts non-final sends per wake until the ttl", async () => {
+    const store = new MemoryStore();
+    expect(await store.adjustProgress("w", 1, 0, 100)).toBe(1);
+    expect(await store.adjustProgress("w", 1, 50, 100)).toBe(2);
+    expect(await store.adjustProgress("w", -1, 50, 100)).toBe(1);
+    expect(await store.adjustProgress("other", 1, 50, 100)).toBe(1);
+    expect(await store.adjustProgress("w", 1, 200, 100)).toBe(1);
+  });
+
   it("closes a wake until its ttl", async () => {
     const store = new MemoryStore();
     expect(await store.isWakeClosed("w", 0)).toBe(false);
