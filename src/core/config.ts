@@ -33,6 +33,9 @@ export interface Config {
   contextLimit: number;
   rateLimitMax: number;
   rateLimitWindowMs: number;
+  /** /send calls, per chat, inside sendRateLimitWindowMs. Reply tokens and the outbound key share it. */
+  sendRateLimitMax: number;
+  sendRateLimitWindowMs: number;
   bridgeAck: boolean;
   fastGreeting: boolean;
   outboundApiKey: string | null;
@@ -243,6 +246,8 @@ export function loadConfig(env: EnvSource): Config {
     contextLimit: Math.max(1, readInt(env, "CONTEXT_LIMIT", 10)),
     rateLimitMax: Math.max(1, readInt(env, "RATE_LIMIT_MAX", 20)),
     rateLimitWindowMs: Math.max(1000, readInt(env, "RATE_LIMIT_WINDOW_MS", 60_000)),
+    sendRateLimitMax: Math.max(1, readInt(env, "SEND_RATE_LIMIT_MAX", 30)),
+    sendRateLimitWindowMs: Math.max(1000, readInt(env, "SEND_RATE_LIMIT_WINDOW_MS", 60_000)),
     bridgeAck: readBool(env, "BRIDGE_ACK"),
     fastGreeting: readBool(env, "FAST_GREETING"),
     outboundApiKey: outbound.length >= MIN_OUTBOUND_KEY_LENGTH ? outbound : null,

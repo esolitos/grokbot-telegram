@@ -131,6 +131,41 @@ describe("👀 reaction lifecycle", () => {
 });
 
 describe("/send final and interim semantics", () => {
+  it("rate limits /send per chat and does not count a repeated key", async () => {
+    const bridge = app({ env: testEnv({
+      SEND_RATE_LIMIT_MAX: "1",
+      OUTBOUND_API_KEY: "outbound-key-value-for-tests-0123456789",
+      ALLOWLIST_USER_IDS: "42,7",
+    }) });
+    await postUpdate(bridge.deps, bridge.tasks, dmUpdate("q", 1));
+    const reply = bridge.replies()[0]!;
+    expect((await bridge.send(reply, { text: "one", idempotency_key: "progress-1" })).status).toBe(200);
+    const repeat = await bridge.send(reply, { text: "one", idempotency_key: "progress-1" });
+    expect(await repeat.json()).toMatchObject({ ok: true, already_sent: true });
+    const other = await handleRequest(new Request("https://bridge.example/send", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer outbound-key-value-for-tests-0123456789",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ chat_id: "7", text: "proactive" }),
+    }), bridge.deps);
+    expect(other.status).toBe(200);
+    const blocked = await bridge.send(reply, { text: "two" });
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ ok: false, error: "send_rate_limited", retry_after: expect.any(Number) });
+    expect(bridge.telegram("sendMessage").filter((call) => (call.body as { chat_id?: string }).chat_id === "42")).toHaveLength(1);
+    const sameChat = await handleRequest(new Request("https://bridge.example/send", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer outbound-key-value-for-tests-0123456789",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ chat_id: "42", text: "also this chat" }),
+    }), bridge.deps);
+    expect(sameChat.status).toBe(429);
+  });
+
   it("rejects non-final sends past the per-wake cap and still accepts the final answer", async () => {
     const bridge = app({ env: testEnv({ MAX_NON_FINAL_SENDS: "2" }) });
     await postUpdate(bridge.deps, bridge.tasks, dmUpdate("long job", 1));

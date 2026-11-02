@@ -17,6 +17,13 @@ export interface Store {
     windowMs: number,
     max: number,
   ): Promise<{ allowed: boolean; count: number }>;
+  /** Per-chat limit for /send. Kept apart from the wake buckets. */
+  hitSendRate(
+    chatId: string,
+    now: number,
+    windowMs: number,
+    max: number,
+  ): Promise<{ allowed: boolean; count: number }>;
   /** Returns the previous buffer, capped at `limit`, not including `message`. */
   pushContext(scopeKey: string, message: ContextMessage, limit: number): Promise<ContextMessage[]>;
   /** The active wakes in one chat (and forum topic), or null when none. */
@@ -165,6 +172,15 @@ export class MemoryStore implements Store {
     bucket.count += 1;
     this.buckets.set(bucketKey, bucket);
     return { allowed: bucket.count <= max, count: bucket.count };
+  }
+
+  async hitSendRate(
+    chatId: string,
+    now: number,
+    windowMs: number,
+    max: number,
+  ): Promise<{ allowed: boolean; count: number }> {
+    return this.hitRate(`send:${chatId}`, now, windowMs, max);
   }
 
   async pushContext(key: string, message: ContextMessage, limit: number): Promise<ContextMessage[]> {

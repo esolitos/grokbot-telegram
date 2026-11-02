@@ -56,6 +56,20 @@ export function createDurableBackend(namespace: DoNamespace): { store: Store; ty
         count: typeof result.count === "number" ? result.count : 0,
       };
     },
+    async hitSendRate(chatId, now, windowMs, max) {
+      // The chat's object holds this bucket, so chats do not share a counter.
+      const result = await call(namespace, chatObjectName(chatId), {
+        op: "rate",
+        bucketKey: `send:${chatId}`,
+        now,
+        windowMs,
+        max,
+      });
+      return {
+        allowed: result.allowed === true,
+        count: typeof result.count === "number" ? result.count : 0,
+      };
+    },
     async pushContext(scope, message, limit) {
       const result = await call(namespace, chatObjectName(chatIdFromScope(scope)), {
         op: "context",

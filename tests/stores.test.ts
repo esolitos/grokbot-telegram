@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createDurableBackend, type DoNamespace } from "../src/adapters/cloudflare/backend.js";
 import { handleDoFetch } from "../src/adapters/cloudflare/do-storage.js";
+import { ChatSession } from "../src/adapters/cloudflare/session.js";
 import { MemoryStore, scopeKey } from "../src/core/store.js";
 import type { ContextMessage, TypingScope } from "../src/core/types.js";
 import { memoryStorage, testEnv } from "./helpers.js";
@@ -92,6 +94,37 @@ describe("durable object dedupe storage", () => {
     await op(storage, { op: "context", scopeKey: "chat:1:thread:root", message: ctx(1, 1_000_000), limit: 10 });
     const result = await op(storage, { op: "context", scopeKey: "chat:1:thread:root", message: ctx(2, 1_000_000 + 8 * day), limit: 10 });
     expect(result.prior).toEqual([]);
+  });
+});
+
+describe("durable object send rate limit", () => {
+  it("keeps a separate bucket per chat object, apart from wake limits", async () => {
+    const sessions = new Map<string, ChatSession>();
+    const namespace: DoNamespace = {
+      idFromName: (name) => ({ toString: () => name }),
+      get(id) {
+        const name = id.toString();
+        let session = sessions.get(name);
+        if (!session) {
+          session = new ChatSession({ storage: memoryStorage() }, {});
+          sessions.set(name, session);
+        }
+        return {
+          fetch(input, init) {
+            const request = input instanceof Request ? input : new Request(input, init);
+            return session.fetch(request);
+          },
+        };
+      },
+    };
+    const { store } = createDurableBackend(namespace);
+    expect((await store.hitRate("rate:chat:42", 0, 1_000, 1)).allowed).toBe(true);
+    expect((await store.hitRate("rate:chat:42", 10, 1_000, 1)).allowed).toBe(false);
+    expect((await store.hitSendRate("42", 10, 1_000, 1)).allowed).toBe(true);
+    expect((await store.hitSendRate("42", 20, 1_000, 1)).allowed).toBe(false);
+    expect((await store.hitSendRate("7", 20, 1_000, 1)).allowed).toBe(true);
+    expect(sessions.has("chat:42")).toBe(true);
+    expect(sessions.has("chat:7")).toBe(true);
   });
 });
 

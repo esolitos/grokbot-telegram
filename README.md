@@ -243,7 +243,7 @@ Ids are plain decimal numbers (`42`, `-500`). `/healthz` lists any other value u
 
 Messages sent as a chat (anonymous group admins, or posts as a channel) carry `sender_chat`. Only the chat's id in `ALLOWLIST_CHAT_IDS` admits them, and their wake has `from: null`. The bridge ignores automatic forwards from a linked channel.
 
-`OUTBOUND_API_KEY` (at least 32 characters) sends to allowlisted chats outside a wake. Set it only for proactive messages, and keep it with the operator.
+`OUTBOUND_API_KEY` (at least 32 characters) sends to allowlisted chats outside a wake. Leave it unset. Replies use the per-wake token and do not need this key. Set it only when you send proactive messages, and keep it with the operator. It is off when the line is missing or shorter than 32 characters.
 
 ## Configuration
 
@@ -262,7 +262,7 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `ALLOWED_CHAT_TYPES` | no | Default `private`. Comma-separated `private`, `group`, `supergroup`. Unknown names are dropped and listed under `problems`. A group type applies only to chat ids in `ALLOWLIST_CHAT_IDS`. |
 | `PATH_PREFIX` | no | Mount prefix, for example `/bridge`. |
 | `WAKE_COMMANDS` | no | Default `/ask,/help`. |
-| `OUTBOUND_API_KEY` | no | Key for proactive sends. At least 32 characters. |
+| `OUTBOUND_API_KEY` | no | Leave unset. Optional key for proactive sends, at least 32 characters. Off unless you set it. |
 | `BRIDGE_ACK` | no | Default `false`. When `true`, the bridge sends "On it." before the assistant speaks. |
 | `FAST_GREETING` | no | Default `false`. When `true`, the bridge itself answers a bare "hi", "ping", or "thanks". |
 | `REPLY_TOKEN_TTL_SECONDS` | no | Default `600` (10 min). Clamped to 60-3600. Also caps how long typing and the 👀 last. |
@@ -275,6 +275,7 @@ Messages sent as a chat (anonymous group admins, or posts as a channel) carry `s
 | `TELEGRAM_DRAFT_PLACEHOLDER` | no | Default `false`. Experimental `sendMessageDraft` placeholder in private chats. |
 | `CONTEXT_LIMIT` | no | Default `10` prior messages per chat and forum topic, up to 7 days old. |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | no | Default 20 wakes per minute per chat and per user in that chat. |
+| `SEND_RATE_LIMIT_MAX` / `SEND_RATE_LIMIT_WINDOW_MS` | no | Default 30 `/send` calls per minute per chat. Reply tokens and `OUTBOUND_API_KEY` share the bucket. Over the cap, `/send` returns `429 {"ok": false, "error": "send_rate_limited", "retry_after": <seconds>}`. |
 | `DEDUPE_TTL_MS` | no | Default `86400000` (24 h). How long `update_id` claims and operator `idempotency_key` records last. |
 | `MAX_BODY_BYTES` | no | Default `1000000`, minimum 1024. Enforced while streaming, on every host. |
 | `ALLOW_INSECURE_WEBHOOK` | no | Default `false`. Allows an `http://` Grok webhook for local development. |
@@ -317,7 +318,7 @@ npm run cf:deploy
 - The Grok webhook URL comes from configuration. A redirect counts as a failed forward.
 - Text from Telegram users (text, names, titles, `reply_to`, `short_term`) is untrusted. The bridge strips control, bidi, zero-width-space, and Unicode tag characters, caps sizes, escapes `<`, `>`, and `&` in the forwarded JSON, and adds `untrusted_content_notice`. The routine prompt tells the assistant to treat that content as data and to send only to the pinned bridge origin.
 - Telegram calls go only to `api.telegram.org`, and only with a well-formed bot token.
-- `/send` checks the bearer before it reads the body.
+- `/send` checks the bearer before it reads the body, then applies `SEND_RATE_LIMIT_MAX` per chat. The counter lives in the same store as the rest of the chat state (the chat's Durable Object on Cloudflare).
 - The bridge splits outgoing text at 4096 UTF-16 units, on a paragraph, then a line, then a hard cut that keeps surrogate pairs whole. It sends plain text. On HTTP 429 it waits `retry_after` when that is 5 seconds or less, at most twice, and returns longer waits to the caller as `retry_after`.
 - Logs are single-line JSON. They carry drop reasons (`chat_type`, `not_allowlisted`, `not_addressed`, `duplicate`, `rate_limited`) with chat and user ids, which you need for the allowlist. The logger redacts secrets and bearer values.
 - Keep secrets in the gitignored `.env`. Cloudflare, Vercel, Fly.io, Railway, Render, and a VPS load that file. `.env.example` holds placeholders.
